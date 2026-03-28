@@ -152,6 +152,9 @@ process.stdin.on('keypress', function (ch, key) {
     case 'r':
       rebaseFromCurrent();
       break;
+    case 'x':
+      hideCurrent();
+      break;
   }
   if (key.ctrl && key.name == 'c'
       || key.name == 'q'
@@ -215,6 +218,10 @@ function rebaseFromCurrent() {
     rebasingPos = commitPos;
   }
   render();
+}
+
+function hideCurrent() {
+  runCommand('hide', commandArgs.concat([currentTarget()]));
 }
 
 function currentTarget() {
