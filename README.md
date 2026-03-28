@@ -1,24 +1,17 @@
-# hg-sl-up
-
-![](http://i.giphy.com/3o8doNRGQL2bH06rCM.gif)
-
-Install:
-```bash
-npm install -g xixixao/hg-sl-up
-```
+# sl-up
 
 Run:
 ```bash
-hg-sl-up
+./sl-up.js
 ```
 
 Show help:
 ```bash
-hg-sl-up --help
+./sl-up.js --help
 ```
 
-In the demo above, `sl` is aliased to `hg-sl-up -- --quiet`.
+In the demo above, `sl` is aliased to `./sl-up.js -- --quiet`.
 
 ## Requirements
 
-`hg sl` installed, see [hg-experimental](https://bitbucket.org/facebook/hg-experimental/) for instructions.
+`sl` installed.

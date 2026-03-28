@@ -3,8 +3,6 @@
 var child_process = require('child_process');
 var os = require('os');
 
-var keypress = require('keypress');
-
 var eol = require('os').EOL;
 var exec = child_process.exec;
 var spawnSync = child_process.spawnSync;
@@ -120,51 +118,53 @@ function markRebasePos(lines, lineOffset) {
   }
 }
 
-keypress(process.stdin);
-
-process.stdin.on('keypress', function (ch, key) {
-  if (!key) {
-    return;
-  }
-
-  switch (key.name) {
-    case 'up':
-    case 'k':
-      updateCommit(-1);
-      break;
-    case 'down':
-    case 'j':
-      updateCommit(1);
-      break;
-    case 'left':
-      updateBookmark(-1);
-      break;
-    case 'right':
-      updateBookmark(1);
-      break;
-    case 'return':
-    case 'enter':
-      finishCurrent();
-      break;
-    case 'p':
-      finishParent();
-      break;
-    case 'r':
-      rebaseFromCurrent();
-      break;
-    case 'x':
-      hideCurrent();
-      break;
-  }
-  if (key.ctrl && key.name == 'c'
-      || key.name == 'q'
-      || key.name == 'escape') {
-    quit(0);
-  }
-});
-
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', handleInput);
 process.stdin.setRawMode(true);
 process.stdin.resume();
+
+function handleInput(input) {
+  while (input.length) {
+    if (input.slice(0, 3) === '\u001b[A') {
+      updateCommit(-1);
+      input = input.slice(3);
+    } else if (input.slice(0, 3) === '\u001b[B') {
+      updateCommit(1);
+      input = input.slice(3);
+    } else if (input.slice(0, 3) === '\u001b[D') {
+      updateBookmark(-1);
+      input = input.slice(3);
+    } else if (input.slice(0, 3) === '\u001b[C') {
+      updateBookmark(1);
+      input = input.slice(3);
+    } else if (input[0] === 'k') {
+      updateCommit(-1);
+      input = input.slice(1);
+    } else if (input[0] === 'j') {
+      updateCommit(1);
+      input = input.slice(1);
+    } else if (input[0] === '\r' || input[0] === '\n') {
+      finishCurrent();
+      input = input.slice(1);
+    } else if (input[0] === 'p') {
+      finishParent();
+      input = input.slice(1);
+    } else if (input[0] === 'r') {
+      rebaseFromCurrent();
+      input = input.slice(1);
+    } else if (input[0] === 'x') {
+      hideCurrent();
+      input = input.slice(1);
+    } else if (input[0] === '\u0003'
+        || input[0] === 'q'
+        || input[0] === '\u001b') {
+      quit(0);
+      input = input.slice(1);
+    } else {
+      input = input.slice(1);
+    }
+  }
+}
 
 function updateCommit(direction) {
   commitPos =
