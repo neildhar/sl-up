@@ -129,9 +129,11 @@ process.stdin.on('keypress', function (ch, key) {
 
   switch (key.name) {
     case 'up':
+    case 'k':
       updateCommit(-1);
       break;
     case 'down':
+    case 'j':
       updateCommit(1);
       break;
     case 'left':
