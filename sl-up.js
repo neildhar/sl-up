@@ -58,7 +58,7 @@ exec(cmd, function(error, stdout, stderr) {
     .replace(/\033\[(0;)?35m/g, '')
     .replace(/\r\n/g, '\n')
     .split('\n');
-  commitPos = search(1, [-1, 0], /^([ \u2502\u256d\u256e\u256f\u2570\u2500~]*)@/, output);
+  commitPos = search(1, [-1, 0], /^([ \u2502\u256d\u256e\u256f\u2570\u2577\u2500~]*)@/, output);
   bookmarkIndex = -1;
   render();
 });
@@ -168,13 +168,13 @@ function handleInput(input) {
 
 function updateCommit(direction) {
   commitPos =
-    search(direction, commitPos, /^([ \u2502\u256d\u256e\u256f\u2570\u2500~]*)[o@]/, output) || commitPos;
+    search(direction, commitPos, /^([ \u2502\u256d\u256e\u256f\u2570\u2577\u2500~]*)[o@]/, output) || commitPos;
   bookmarkIndex = -1;
   render();
 }
 
 function lineAfterCommit() {
-  var nextCommit = search(1, commitPos, /^([ \u2502\u256d\u256e\u256f\u2570\u2500~]*)[o@]/, output);
+  var nextCommit = search(1, commitPos, /^([ \u2502\u256d\u256e\u256f\u2570\u2577\u2500~]*)[o@]/, output);
   return nextCommit
     ? _line(nextCommit)
     : output.length;
