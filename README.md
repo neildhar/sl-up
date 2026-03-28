@@ -2,15 +2,13 @@
 
 Run:
 ```bash
-./sl-up.js
+rustc sl-up.rs -O -o sl-up && ./sl-up 
 ```
 
 Show help:
 ```bash
-./sl-up.js --help
+./sl-up --help
 ```
-
-In the demo above, `sl` is aliased to `./sl-up.js -- --quiet`.
 
 ## Requirements
 
