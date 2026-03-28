@@ -1,8 +1,8 @@
 {
-  "name": "hg-sl-up",
+  "name": "sl-up",
   "version": "0.1.0",
-  "description": "hg update to bookmarks and commits interactively via keyboard",
-  "bin": "hg-sl-up.sh",
+  "description": "Sapling goto to bookmarks and commits interactively via keyboard",
+  "bin": "sl-up.sh",
   "author": "xixixao",
   "license": "MIT",
   "dependencies": {

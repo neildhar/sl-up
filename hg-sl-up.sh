@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ "$1" = "--help" ] || [ "$1" = "help" ]; then
-  echo "hg-sl-up [OPTIONS] [HG_SL_OPTIONS] -- [HG_UP_OPTIONS]"
+  echo "hg-sl-up [OPTIONS] [SMARTLOG_OPTIONS] -- [GOTO_OR_REBASE_OPTIONS]"
   echo ""
   echo "select commit with keyboard from smart log and update/rebase to it"
   echo ""
@@ -16,15 +16,15 @@ if [ "$1" = "--help" ] || [ "$1" = "help" ]; then
   echo "    hit Enter to rebase onto that commit. Hit P to rebase onto its"
   echo "    parent instead."
   echo ""
-  echo "    HG_SL_OPTIONS are options that are passed to hg sl."
-  echo "    HG_UP_OPTIONS are options that are passed to hg update or rebase."
+  echo "    SMARTLOG_OPTIONS are options that are passed to sl smartlog."
+  echo "    GOTO_OR_REBASE_OPTIONS are options that are passed to sl goto or rebase."
   echo ""
   echo "    For example:"
   echo ""
-  echo "        hg-sl-up --stat -- --quiet"
+  echo "        hg-sl-up --stat -- --clean"
   echo ""
-  echo "    shows the stats for each commit (hg sl --stat) and doesn't print"
-  echo "    the summary of the update (hg up --quiet)."
+  echo "    shows the stats for each commit (sl smartlog --stat) and performs"
+  echo "    a clean goto (sl goto --clean)."
   echo ""
   echo "OPTIONS can be any of:"
   echo " --help     shows this help listing"
@@ -77,12 +77,14 @@ if [[ -f $UP_FILE ]]; then
   ARGS=`cat $UP_FILE`
   rm $UP_FILE
   HG_COMMAND="up"
-else
+elif [[ -f $REBASE_FILE ]]; then
   ARGS=`cat $REBASE_FILE`
   rm $REBASE_FILE
   HG_COMMAND="rebase"
+else
+  ARGS=""
 fi
 
 tput rmcup && stty echo && # leave fullscreen
 [[ ! -z  $ARGS ]] &&
-hg $HG_COMMAND ${command_args[@]} $ARGS
+sl $HG_COMMAND ${command_args[@]} $ARGS

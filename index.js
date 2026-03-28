@@ -8,7 +8,7 @@ var keypress = require('keypress');
 var eol = require('os').EOL;
 var exec = child_process.exec;
 
-var cmd = 'hg --color always sl ' + process.argv.slice(2).join(' ');
+var cmd = 'sl --color always smartlog ' + process.argv.slice(2).join(' ');
 
 var currentCommitMarker = '@';
 
@@ -23,10 +23,8 @@ exec(cmd, function(error, stdout, stderr) {
     .replace(/\033\[(0;)?35m/g, '')
     .replace(/\r\n/g, '\n')
     .split('\n');
-  commitPos = search(1, [-1, 0], /^((?:\|\s))*@/, output);
-  bookmarkIndex = indexOf(1, 0, '\033[0;33m', output[_line(commitPos)]);
-  output[_line(commitPos)] = output[_line(commitPos)]
-    .replace(/\033\[0;33m/, '\033[0;32m');
+  commitPos = search(1, [-1, 0], /^([ \u2502\u256d\u256e\u256f\u2570\u2500~]*)@/, output);
+  bookmarkIndex = -1;
   render();
 });
 
@@ -130,13 +128,13 @@ process.stdin.resume();
 
 function updateCommit(direction) {
   commitPos =
-    search(direction, commitPos, /^((?:\|\s)*)[o@]/, output) || commitPos;
-  bookmarkIndex = indexOf(1, 0, '\033[0;32m', output[_line(commitPos)]);
+    search(direction, commitPos, /^([ \u2502\u256d\u256e\u256f\u2570\u2500~]*)[o@]/, output) || commitPos;
+  bookmarkIndex = -1;
   render();
 }
 
 function lineAfterCommit() {
-  var nextCommit = search(1, commitPos, /^(\|\s)*[o@]/, output);
+  var nextCommit = search(1, commitPos, /^([ \u2502\u256d\u256e\u256f\u2570\u2500~]*)[o@]/, output);
   return nextCommit
     ? _line(nextCommit)
     : output.length;
@@ -202,7 +200,7 @@ function currentTarget() {
 
   } else {
     var commit = output[_line(commitPos)]
-      .match(/\S{6,9}/)[0];
+      .match(/[0-9a-f]{12,40}/)[0];
   }
   // Use a tempfile unfortunately
   return bookmark || commit;
