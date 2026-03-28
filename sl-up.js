@@ -1,14 +1,49 @@
+#!/usr/bin/env node
+
 var child_process = require('child_process');
-var fs = require('fs');
 var os = require('os');
-var readline = require('readline');
 
 var keypress = require('keypress');
 
 var eol = require('os').EOL;
 var exec = child_process.exec;
+var spawnSync = child_process.spawnSync;
 
-var cmd = 'sl --color always smartlog ' + process.argv.slice(2).join(' ');
+if (process.argv[2] === '--help' || process.argv[2] === 'help') {
+  console.log('hg-sl-up [OPTIONS] [SMARTLOG_OPTIONS] -- [UP_OR_REBASE_OPTIONS]');
+  console.log('');
+  console.log('select commit with keyboard from smartlog and update/rebase to it');
+  console.log('');
+  console.log('    Use up and down arrow keys to select previous and next commit');
+  console.log('    respectively. Use left and right arrow keys to select previous and');
+  console.log('    next bookmark respectively on a selected commit. Hit Enter to');
+  console.log('    update to the selected commit or bookmark. Hit P to update to the');
+  console.log('    parent of the selected commit instead. Hit Q, CTRL-C or Esc');
+  console.log('    to exit without updating.');
+  console.log('');
+  console.log('    Hit R to select a commit to rebase. Move to a different commit and');
+  console.log('    hit Enter to rebase onto that commit. Hit P to rebase onto its');
+  console.log('    parent instead.');
+  console.log('');
+  console.log('    SMARTLOG_OPTIONS are options that are passed to sl smartlog.');
+  console.log('    UP_OR_REBASE_OPTIONS are options that are passed to sl up or rebase.');
+  console.log('');
+  console.log('    For example:');
+  console.log('');
+  console.log('        hg-sl-up --stat -- --clean');
+  console.log('');
+  console.log('    shows the stats for each commit (sl smartlog --stat) and performs');
+  console.log('    a clean update (sl up --clean).');
+  console.log('');
+  console.log('OPTIONS can be any of:');
+  console.log(' --help     shows this help listing');
+  process.exit(0);
+}
+
+var splitArgs = splitArgv(process.argv.slice(2));
+var smartlogArgs = splitArgs[0];
+var commandArgs = splitArgs[1];
+var cmd = 'sl --color always smartlog ' + smartlogArgs.join(' ');
 
 var currentCommitMarker = '@';
 
@@ -17,6 +52,8 @@ var commitPos;
 var bookmarkIndex;
 var rebasing;
 var rebasingPos;
+
+enterFullscreen();
 
 exec(cmd, function(error, stdout, stderr) {
   output = stdout
@@ -57,7 +94,7 @@ function render() {
     '\033[0m' +
 
     renderBuffer.join('\033[0m' + eol) +
-    eol // ensure last line is empty
+    eol
   );
 }
 
@@ -83,10 +120,8 @@ function markRebasePos(lines, lineOffset) {
   }
 }
 
-// make `process.stdin` begin emitting "keypress" events
 keypress(process.stdin);
 
-// listen for the "keypress" event
 process.stdin.on('keypress', function (ch, key) {
   if (!key) {
     return;
@@ -119,7 +154,7 @@ process.stdin.on('keypress', function (ch, key) {
   if (key.ctrl && key.name == 'c'
       || key.name == 'q'
       || key.name == 'escape') {
-    process.stdin.pause();
+    quit(0);
   }
 });
 
@@ -159,16 +194,13 @@ function finishParent() {
 
 function finish(toModifier) {
   if (rebasing) {
-    rebaseToCurrent(toModifier);
+    runCommand('rebase', commandArgs.concat([
+      '-s', rebasing,
+      '-d', toModifier(currentTarget())
+    ]));
   } else {
-    up(toModifier);
+    runCommand('up', commandArgs.concat([toModifier(currentTarget())]));
   }
-}
-
-function up(toModifier) {
-  process.stdin.pause();
-  // Use a tempfile unfortunately
-  fs.writeFileSync('.____hg-sl-up-to', toModifier(currentTarget()));
 }
 
 function rebaseFromCurrent() {
@@ -183,15 +215,6 @@ function rebaseFromCurrent() {
   render();
 }
 
-function rebaseToCurrent(toModifier) {
-  process.stdin.pause();
-  var from = rebasing;
-  var to = toModifier(currentTarget());
-  // Use a tempfile unfortunately
-  fs.writeFileSync('.____hg-sl-rebase-to',
-    '-s' + ' ' + from + ' ' + '-d' + ' ' + to);
-}
-
 function currentTarget() {
   if (bookmarkIndex !== -1) {
     var bookmark = output[_line(commitPos)]
@@ -202,8 +225,38 @@ function currentTarget() {
     var commit = output[_line(commitPos)]
       .match(/[0-9a-f]{12,40}/)[0];
   }
-  // Use a tempfile unfortunately
   return bookmark || commit;
+}
+
+function runCommand(command, args) {
+  leaveFullscreen();
+  var result = spawnSync('sl', [command].concat(args), {stdio: 'inherit'});
+  process.exit(result.status || 0);
+}
+
+function quit(code) {
+  leaveFullscreen();
+  process.exit(code);
+}
+
+function enterFullscreen() {
+  process.stdout.write('\033[?1049h');
+}
+
+function leaveFullscreen() {
+  if (process.stdin.isRaw) {
+    process.stdin.setRawMode(false);
+  }
+  process.stdin.pause();
+  process.stdout.write('\033[?1049l');
+}
+
+function splitArgv(args) {
+  var sep = args.indexOf('--');
+  if (sep === -1) {
+    return [args, []];
+  }
+  return [args.slice(0, sep), args.slice(sep + 1)];
 }
 
 function insertAll(whatWhere, to) {
@@ -222,7 +275,6 @@ function insert(what, positions, inserted) {
   return inserted;
 }
 
-// fromPos != null
 function search(direction, fromPos, pattern, where) {
   var len = where.length;
   var start = direction + _line(fromPos);
@@ -235,7 +287,6 @@ function search(direction, fromPos, pattern, where) {
   return null;
 }
 
-// fromPos != null
 function posOf(direction, fromPos, what, where) {
   var len = where.length;
   var fromCol = _col(fromPos);

@@ -1,8 +1,8 @@
 {
   "name": "sl-up",
   "version": "0.1.0",
-  "description": "Sapling goto to bookmarks and commits interactively via keyboard",
-  "bin": "sl-up.sh",
+  "description": "Sapling update to bookmarks and commits interactively via keyboard",
+  "bin": "sl-up.js",
   "author": "xixixao",
   "license": "MIT",
   "dependencies": {
