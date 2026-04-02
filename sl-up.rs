@@ -416,7 +416,7 @@ fn is_current_commit_line(line: &str) -> Option<usize> {
 }
 
 fn is_commit_line(line: &str) -> Option<usize> {
-    commit_marker_pos(line, |c| c == '@' || c == 'o')
+    commit_marker_pos(line, |c| c == '@' || c == 'o' || c == 'x')
 }
 
 fn commit_marker_pos<F>(line: &str, marker: F) -> Option<usize>
