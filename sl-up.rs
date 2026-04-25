@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::env;
 use std::io::{self, Read, Write};
-use std::process::{Command, Stdio, exit};
+use std::process::{exit, Command, Stdio};
 
 const HELP: &str = "\
 hg-sl-up [OPTIONS] [SMARTLOG_OPTIONS] -- [UP_OR_REBASE_OPTIONS]
@@ -32,6 +33,11 @@ OPTIONS can be any of:
  --help     shows this help listing";
 
 const PREFIX_CHARS: [char; 9] = [' ', '│', '╭', '╮', '╯', '╰', '╷', '─', '~'];
+const SMARTLOG_METADATA_TEMPLATE: &str = "\
+{node}\
+{if(github_pull_request_number, ' {label(\"sl.branch\", \"#{github_pull_request_number}\")}')}\
+{remotenames % ' {label(\"sl.remote\", remotename)}'}\
+{bookmarks % ' {label(\"sl.book\", bookmark)}'}\\n";
 
 fn main() {
     if let Err(err) = run() {
@@ -88,7 +94,17 @@ fn run_sl_smartlog(args: &[String]) -> Result<Vec<String>, String> {
         .output()
         .map_err(|e| e.to_string())?;
 
-    let mut lines: Vec<String> = String::from_utf8_lossy(&output.stdout)
+    let mut lines = smartlog_lines(&output.stdout);
+    if !has_template_arg(args) {
+        let metadata = run_sl_smartlog_metadata(args)?;
+        append_metadata_to_changesets(&mut lines, &metadata);
+    }
+
+    Ok(lines)
+}
+
+fn smartlog_lines(stdout: &[u8]) -> Vec<String> {
+    let mut lines: Vec<String> = String::from_utf8_lossy(stdout)
         .replace("\r\n", "\n")
         .split('\n')
         .map(str::to_owned)
@@ -105,7 +121,89 @@ fn run_sl_smartlog(args: &[String]) -> Result<Vec<String>, String> {
         lines.pop();
     }
 
-    Ok(lines)
+    lines
+}
+
+fn run_sl_smartlog_metadata(args: &[String]) -> Result<HashMap<String, String>, String> {
+    let output = Command::new("sl")
+        .args(smartlog_metadata_command_args(args))
+        .output()
+        .map_err(|e| e.to_string())?;
+    Ok(metadata_by_node(&smartlog_lines(&output.stdout)))
+}
+
+fn smartlog_metadata_command_args(args: &[String]) -> Vec<String> {
+    let mut command_args = vec![
+        "--color".to_owned(),
+        "always".to_owned(),
+        "smartlog".to_owned(),
+    ];
+    command_args.extend(metadata_passthrough_args(args));
+    command_args.extend(["-T".to_owned(), SMARTLOG_METADATA_TEMPLATE.to_owned()]);
+    command_args
+}
+
+fn metadata_passthrough_args(args: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        let arg = &args[i];
+        if matches!(
+            arg.as_str(),
+            "--stat" | "--commit-info" | "-p" | "--patch" | "-g" | "--git" | "-G" | "--graph"
+        ) {
+            i += 1;
+        } else if arg == "-T" || arg == "--template" {
+            i += 2;
+        } else if arg.starts_with("-T") || arg.starts_with("--template=") {
+            i += 1;
+        } else {
+            out.push(arg.clone());
+            i += 1;
+        }
+    }
+    out
+}
+
+fn has_template_arg(args: &[String]) -> bool {
+    args.iter().any(|arg| {
+        arg == "-T"
+            || arg == "--template"
+            || arg.starts_with("-T")
+            || arg.starts_with("--template=")
+    })
+}
+
+fn metadata_by_node(lines: &[String]) -> HashMap<String, String> {
+    lines
+        .iter()
+        .filter_map(|line| metadata_for_line(line))
+        .collect()
+}
+
+fn metadata_for_line(line: &str) -> Option<(String, String)> {
+    let stripped = strip_ansi(line);
+    let node = find_full_hex_commit(&stripped)?;
+    let tail = line.get(line.find(&node)? + node.len()..)?;
+    if strip_ansi(tail).trim().is_empty() {
+        return None;
+    }
+    Some((node, format!("  {}", tail.trim_start())))
+}
+
+fn append_metadata_to_changesets(lines: &mut [String], metadata: &HashMap<String, String>) {
+    for line in lines {
+        let stripped = strip_ansi(line);
+        if !stripped.contains("changeset:") {
+            continue;
+        }
+        let Some(node) = find_full_hex_commit(&stripped) else {
+            continue;
+        };
+        if let Some(suffix) = metadata.get(&node) {
+            line.push_str(suffix);
+        }
+    }
 }
 
 fn run_action(action: Action, command_args: &[String]) -> Result<(), String> {
@@ -230,7 +328,9 @@ impl AppState {
         self.mark_rebase_pos(&mut render_buffer, from);
 
         let mut stdout = io::stdout().lock();
-        stdout.write_all(b"\x1b[2J\x1b[0f\x1b[0m").map_err(|e| e.to_string())?;
+        stdout
+            .write_all(b"\x1b[2J\x1b[0f\x1b[0m")
+            .map_err(|e| e.to_string())?;
         stdout
             .write_all(render_buffer.join("\u{1b}[0m\r\n").as_bytes())
             .map_err(|e| e.to_string())?;
@@ -265,8 +365,8 @@ impl AppState {
     }
 
     fn update_commit(&mut self, direction: isize) -> Result<(), String> {
-        self.commit_pos =
-            search(direction, self.commit_pos, is_commit_line, &self.output).unwrap_or(self.commit_pos);
+        self.commit_pos = search(direction, self.commit_pos, is_commit_line, &self.output)
+            .unwrap_or(self.commit_pos);
         self.bookmark_index = None;
         self.render()
     }
@@ -545,16 +645,92 @@ fn insert_at_char(s: &str, at: usize, insert: &str) -> String {
 }
 
 fn find_hex_commit(line: &str) -> Option<String> {
+    find_hex_commit_with_min_len(line, 12)
+}
+
+fn find_full_hex_commit(line: &str) -> Option<String> {
+    find_hex_commit_with_min_len(line, 40)
+}
+
+fn find_hex_commit_with_min_len(line: &str, min_len: usize) -> Option<String> {
     let mut current = String::new();
     for ch in line.chars() {
         if ch.is_ascii_hexdigit() {
             current.push(ch);
         } else {
-            if current.len() >= 12 {
+            if current.len() >= min_len {
                 return Some(current);
             }
             current.clear();
         }
     }
-    (current.len() >= 12).then_some(current)
+    (current.len() >= min_len).then_some(current)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn metadata_command_preserves_rev_args_and_drops_display_args() {
+        let args = smartlog_metadata_command_args(&[
+            "--stat".to_owned(),
+            "-r".to_owned(),
+            "draft()".to_owned(),
+            "--patch".to_owned(),
+        ]);
+        assert_eq!(
+            args,
+            vec![
+                "--color".to_owned(),
+                "always".to_owned(),
+                "smartlog".to_owned(),
+                "-r".to_owned(),
+                "draft()".to_owned(),
+                "-T".to_owned(),
+                SMARTLOG_METADATA_TEMPLATE.to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn template_args_disable_metadata_injection() {
+        assert!(has_template_arg(&["-T".to_owned(), "{sl}".to_owned()]));
+        assert!(has_template_arg(&["--template={sl}".to_owned()]));
+        assert!(has_template_arg(&["-T{sl}".to_owned()]));
+    }
+
+    #[test]
+    fn metadata_for_line_keeps_colored_labels() {
+        let line = "o  7d46efca1623c2947fb39c63272c4dd488419d93  \u{1b}[0;1m#10129\u{1b}[0m \u{1b}[0;32morigin/main\u{1b}[0m";
+        assert_eq!(
+            metadata_for_line(line),
+            Some((
+                "7d46efca1623c2947fb39c63272c4dd488419d93".to_owned(),
+                "  \u{1b}[0;1m#10129\u{1b}[0m \u{1b}[0;32morigin/main\u{1b}[0m".to_owned(),
+            ))
+        );
+    }
+
+    #[test]
+    fn append_metadata_only_changes_changeset_lines() {
+        let node = "7d46efca1623c2947fb39c63272c4dd488419d93";
+        let mut lines = vec![
+            format!("╷ @  \u{1b}[0;1;34;93mchangeset:   {node}\u{1b}[0m  (@)"),
+            "╷ │  summary:     Account for duplicated elementwise ops".to_owned(),
+        ];
+        let metadata =
+            HashMap::from([(node.to_owned(), "  \u{1b}[0;1m#10129\u{1b}[0m".to_owned())]);
+
+        append_metadata_to_changesets(&mut lines, &metadata);
+
+        assert_eq!(
+            lines[0],
+            format!("╷ @  \u{1b}[0;1;34;93mchangeset:   {node}\u{1b}[0m  (@)  \u{1b}[0;1m#10129\u{1b}[0m")
+        );
+        assert_eq!(
+            lines[1],
+            "╷ │  summary:     Account for duplicated elementwise ops"
+        );
+    }
 }
